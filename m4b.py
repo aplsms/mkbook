@@ -40,6 +40,7 @@ AUTHOR     = ''
 TITLE      = ''
 DEBUG      = ''
 TEMP       = tempfile.mkdtemp();
+TFILE      = ''
 Version    = '0.1.0'
 
 argv = sys.argv[1:]
@@ -67,7 +68,7 @@ def secs_to_hms(seconds):
 print "mp3 to m4b converter by Andrii Petrenko (apl@petrenko.me)"
 
 try:
-    opts, args = getopt.getopt(argv,"hi:c:a:t:d",["ifile=","cover=","author=","title="])
+    opts, args = getopt.getopt(argv,"hi:c:a:t:df",["ifile=","cover=","author=","title="])
 except getopt.GetoptError:
     print 'm4b.py [-i <inputfile>[,<inputfile2>...]] [-c <cover>] [-a <author>] [-t <title>] -d -h'
     sys.exit(2)
@@ -89,6 +90,8 @@ for opt, arg in opts:
         AUTHOR = arg.decode('utf-8')
     elif opt in ("-t", "--title"):
         TITLE = arg.decode('utf-8')
+    elif opt in ("-f", "--file"):
+        TFILE = 'true'
 
 debug("Temporary directory is " + TEMP)
 
@@ -135,10 +138,13 @@ for filename in mp3_files:
         except:
             pass
 
-    try:
-        title = audio["title"][0]
-    except:
-        title = filename
+    if TFILE:
+        title = filename.decode('utf-8')
+    else:
+        try:
+            title = audio["title"][0]
+        except:
+            title = filename.decode('utf-8')
 
     counter += 1
 
@@ -160,15 +166,14 @@ subprocess.call(["MP4chaps", "--convert", "--chapter-qt", TEMP+"/output.mp4"], s
 # create tags, rename file
 audio = MP4(TEMP+"/output.mp4")
 audio["\xa9nam"] = [TITLE]
+audio["\xa9alb"] = [TITLE]
 audio["\xa9ART"] = [AUTHOR]
 audio.save()
 
 if not COVER:
     if os.path.isfile("cover.jpg"):
         COVER = "cover.jpg"
-
-
-if COVER:
+else
     subprocess.call(["mp4art", "--add", COVER, TEMP+"/output.mp4"], stdout=FNULL)
 
 debug("Rename "+TEMP+"/output.mp4 " +AUTHOR+" - "+TITLE+".m4b" )
