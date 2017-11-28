@@ -25,6 +25,7 @@ from mutagen.mp4 import MP4
 import mad
 import time
 import os
+import shutil
 import subprocess
 import sys
 import getopt
@@ -38,9 +39,11 @@ COVER      = ''
 mp3_files  = ''
 AUTHOR     = ''
 TITLE      = ''
+ALBUM      = ''
 DEBUG      = ''
 TEMP       = tempfile.mkdtemp();
 TFILE      = ''
+BITRATE    = '128k'
 Version    = '0.1.0'
 
 argv = sys.argv[1:]
@@ -68,13 +71,13 @@ def secs_to_hms(seconds):
 print "mp3 to m4b converter by Andrii Petrenko (apl@petrenko.me)"
 
 try:
-    opts, args = getopt.getopt(argv,"hi:c:a:t:df",["ifile=","cover=","author=","title="])
+    opts, args = getopt.getopt(argv,"hi:c:a:t:A:df",["ifile=","cover=","author=","title="])
 except getopt.GetoptError:
-    print 'm4b.py [-i <inputfile>[,<inputfile2>...]] [-c <cover>] [-a <author>] [-t <title>] -d -h'
+    print 'm4b.py [-i <inputfile>[,<inputfile2>...]] [-c <cover>] [-a <author>] [-A <Album>] [-t <title>] -d -h -f'
     sys.exit(2)
 for opt, arg in opts:
     if opt == '-h':
-        print 'm4b.py [-i <inputfile>[,<inputfile2>...]] [-c <cover>] [-a <author>] [-t <title>] -d -h'
+        print 'm4b.py [-i <inputfile>[,<inputfile2>...]] [-c <cover>] [-a <author>] [-A <Album>] [-t <title>] -d -h -f'
         sys.exit()
     elif opt == '-d':
         DEBUG=1
@@ -88,6 +91,8 @@ for opt, arg in opts:
         debug("Cover file is " + COVER )
     elif opt in ("-a", "--author"):
         AUTHOR = arg.decode('utf-8')
+    elif opt in ("-A", "--album"):
+        ALBUM = arg.decode('utf-8')
     elif opt in ("-t", "--title"):
         TITLE = arg.decode('utf-8')
     elif opt in ("-f", "--file"):
@@ -101,30 +106,38 @@ debug("Temporary directory is " + TEMP)
 
 # get mp3
 if not mp3_files :
-    mp3_files = [filename for filename in os.listdir(".") if filename.endswith(".mp3")]
+    mp3_files = [filename for filename in os.listdir(".") if filename.endswith(".mp3") or filename.endswith(".MP3")]
     mp3_files.sort()
+
+FNULL = open(os.devnull, 'w')
+
+subprocess.call(["ffmpeg"] + ["-i"] + [mp3_files[0]] + [TEMP+"/cover.jpg"], stdout=FNULL, stderr=FNULL)
 
 #debug ("Input *.mp3 file list is " + ",".join(mp3_files));
 print "Converting " + ",".join(mp3_files)+" to audiobook"
 
-FNULL = open(os.devnull, 'w')
 # wrap mp3
-debug ("mp3wrap -v " +TEMP+ "/output.mp3" + ",".join(mp3_files) )
+debug ("mp3wrap -v " +TEMP+ "/output.mp3 " + ",".join(mp3_files) )
 subprocess.call(["mp3wrap"] + ["-v"] + [TEMP+"/output.mp3"] + mp3_files, stdout=FNULL)
-
-# convert to aac
-ffmpeg = 'ffmpeg -i '+TEMP+'/output_MP3WRAP.mp3 -y -vn -acodec libfaac -ab 128k -ar 44100 -f mp4 -threads 4 '+TEMP+'/output.aac'
-debug(ffmpeg)
-subprocess.call(ffmpeg.split(" "), stdout=FNULL, stderr=FNULL)
+print "Done"
 
 # create chapters file
 chapters_file = open(TEMP+'/chapters', 'w')
 counter = 0
 time    = 0
 
+
 for filename in mp3_files:
     audio = MP3(filename, ID3=EasyID3)
     length = mad.MadFile(filename).total_time() / 1000. # don't use mutagen here, because it isn't very precise
+    if audio.info.bitrate >= 160000:
+        BITRATE = '160k'
+    elif audio.info.bitrate >= 128000:
+        BITRATE = '128k'
+    elif audio.info.bitrate >= 96000:
+        BITRATE = '96k'
+    else:
+        BITRATE = '64k'
 
     if not TITLE:
         try:
@@ -153,8 +166,16 @@ for filename in mp3_files:
     debug( "Chapter: " +str(counter)+", length: " +str(length)+ ", Title: " +title.encode('utf-8') )
 
     time += length
-
+debug( "BITRATE = "+BITRATE)
 chapters_file.close()
+
+# convert to aac
+ffmpeg = 'ffmpeg -i '+TEMP+'/output_MP3WRAP.mp3 -y -vn -acodec libfdk_aac -ab '+BITRATE+' -ar 44100 -f mp4 -threads 4 '+TEMP+'/output.aac'
+debug(ffmpeg)
+subprocess.call(ffmpeg.split(" "), stdout=FNULL, stderr=FNULL)
+
+if not ALBUM:
+    ALBUM = TITLE
 
 # add chapters
 
@@ -166,28 +187,36 @@ subprocess.call(["MP4chaps", "--convert", "--chapter-qt", TEMP+"/output.mp4"], s
 # create tags, rename file
 audio = MP4(TEMP+"/output.mp4")
 audio["\xa9nam"] = [TITLE]
-audio["\xa9alb"] = [TITLE]
+audio["\xa9alb"] = [ALBUM]
 audio["\xa9ART"] = [AUTHOR]
 audio.save()
 
 if not COVER:
     if os.path.isfile("cover.jpg"):
         COVER = "cover.jpg"
-else
+    elif os.path.isfile("Cover.jpg"):
+        COVER = "Cover.jpg"
+    elif os.path.isfile("folder.jpg"):
+        COVER = "folder.jpg"
+    elif os.path.isfile(TEMP+"/cover.jpg"):
+        COVER = TEMP+"/cover.jpg"
+if COVER:
     subprocess.call(["mp4art", "--add", COVER, TEMP+"/output.mp4"], stdout=FNULL)
 
-debug("Rename "+TEMP+"/output.mp4 " +AUTHOR+" - "+TITLE+".m4b" )
-os.rename(TEMP+"/output.mp4", "%s - %s.m4b" % (AUTHOR, TITLE))
+if TITLE == ALBUM:
+    debug("Rename "+TEMP+"/output.mp4 " +AUTHOR+" - "+TITLE+".m4b" )
+    shutil.move(TEMP+"/output.mp4", "%s - %s.m4b" % (AUTHOR, TITLE))
+    print "Please check result: %s - %s.m4b" % (AUTHOR, TITLE)
+else:
+    debug("Rename "+TEMP+"/output.mp4 " +AUTHOR+" - "+ALBUM+" - "+TITLE+".m4b" )
+    shutil.move(TEMP+"/output.mp4", "%s - %s - %s.m4b" % (AUTHOR, ALBUM, TITLE))
+    print "Please check result: %s - %s - %s.m4b" % (AUTHOR, ALBUM, TITLE)
 
 # cleanup
 os.remove(TEMP+"/chapters")
 os.remove(TEMP+"/output.aac")
 os.remove(TEMP+"/output_MP3WRAP.mp3")
+if os.path.isfile(TEMP+"/cover.jpg"):
+    os.remove(TEMP+"/cover.jpg")
 os.removedirs(TEMP)
 FNULL.close()
-
-# last report
-print "Please check result: %s - %s.m4b" % (AUTHOR, TITLE)
-# print
-# print "Now use iTunes or gtkPod>=v0.99.14 to transfer the audio book to your iPod."
-# print
