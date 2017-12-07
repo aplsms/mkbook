@@ -19,6 +19,7 @@
 # Requires: ffmpeg, MP4Box, mp4chaps, mutagen, libmad, mp3wrap
 
 from mutagen.easyid3 import EasyID3
+
 from mutagen.mp3 import MP3
 from mutagen.mp4 import MP4
 
@@ -111,8 +112,6 @@ if not mp3_files :
 
 FNULL = open(os.devnull, 'w')
 
-subprocess.call(["ffmpeg"] + ["-i"] + [mp3_files[0]] + [TEMP+"/cover.jpg"], stdout=FNULL, stderr=FNULL)
-
 #debug ("Input *.mp3 file list is " + ",".join(mp3_files));
 print "Converting " + ",".join(mp3_files)+" to audiobook"
 
@@ -178,13 +177,21 @@ if not ALBUM:
     ALBUM = TITLE
 
 # add chapters
-
-subprocess.call(["MP4Box", "-add", TEMP+"/output.aac", "-chap", TEMP+"/chapters", TEMP+"/output.mp4"], stdout=FNULL, stderr=FNULL)
+debug("Adding Chapters")
+if DEBUG:
+    subprocess.call(["MP4Box", "-add", TEMP+"/output.aac", "-chap", TEMP+"/chapters", TEMP+"/output.mp4"])
+else:
+    subprocess.call(["MP4Box", "-add", TEMP+"/output.aac", "-chap", TEMP+"/chapters", TEMP+"/output.mp4"], stdout=FNULL, stderr=FNULL)
 
 # convert chapters to quicktime format
-subprocess.call(["MP4chaps", "--convert", "--chapter-qt", TEMP+"/output.mp4"], stdout=FNULL)
+debug ("converting to the Quicktime Format")
+if DEBUG:
+    subprocess.call(["MP4chaps", "--convert", "--chapter-qt", TEMP+"/output.mp4"])
+else:
+    subprocess.call(["MP4chaps", "--convert", "--chapter-qt", TEMP+"/output.mp4"], stdout=FNULL)
 
 # create tags, rename file
+debug("Adding tags")
 audio = MP4(TEMP+"/output.mp4")
 audio["\xa9nam"] = [TITLE]
 audio["\xa9alb"] = [ALBUM]
@@ -198,14 +205,27 @@ if not COVER:
         COVER = "Cover.jpg"
     elif os.path.isfile("folder.jpg"):
         COVER = "folder.jpg"
-    elif os.path.isfile(TEMP+"/cover.jpg"):
-        COVER = TEMP+"/cover.jpg"
+    elif os.path.isfile("front.jpg"):
+        COVER = "front.jpg"
+    else:
+        if DEBUG:
+            subprocess.call(["ffmpeg"] + ["-i"] + [mp3_files[0]] + [TEMP+"/cover.png"])
+        else:
+            subprocess.call(["ffmpeg"] + ["-i"] + [mp3_files[0]] + [TEMP+"/cover.png"], stdout=FNULL, stderr=FNULL)
+            if os.path.isfile(TEMP+"/cover.png"):
+                COVER = TEMP+"/cover.png"
+
 if COVER:
-    subprocess.call(["mp4art", "--add", COVER, TEMP+"/output.mp4"], stdout=FNULL)
+    if DEBUG:
+        debug("Cover is: "+COVER)
+        subprocess.call(["mp4art", "--add", COVER, TEMP+"/output.mp4"])
+    else:
+        subprocess.call(["mp4art", "--add", COVER, TEMP+"/output.mp4"], stdout=FNULL)
+
 
 if TITLE == ALBUM:
     debug("Rename "+TEMP+"/output.mp4 " +AUTHOR+" - "+TITLE+".m4b" )
-    shutil.move(TEMP+"/output.mp4", "%s - %s.m4b" % (AUTHOR, TITLE))
+    shutil.copy(TEMP+"/output.mp4", "%s - %s.m4b" % (AUTHOR, TITLE))
     print "Please check result: %s - %s.m4b" % (AUTHOR, TITLE)
 else:
     debug("Rename "+TEMP+"/output.mp4 " +AUTHOR+" - "+ALBUM+" - "+TITLE+".m4b" )
@@ -213,10 +233,16 @@ else:
     print "Please check result: %s - %s - %s.m4b" % (AUTHOR, ALBUM, TITLE)
 
 # cleanup
-os.remove(TEMP+"/chapters")
-os.remove(TEMP+"/output.aac")
-os.remove(TEMP+"/output_MP3WRAP.mp3")
-if os.path.isfile(TEMP+"/cover.jpg"):
-    os.remove(TEMP+"/cover.jpg")
-os.removedirs(TEMP)
+
+if DEBUG:
+    debug("see temp directory: "+TEMP)
+    sys.exit()
+else:
+    os.remove(TEMP+"/chapters")
+    os.remove(TEMP+"/output.aac")
+    os.remove(TEMP+"/output_MP3WRAP.mp3")
+    if os.path.isfile(TEMP+"/cover.png"):
+        os.remove(TEMP+"/cover.png")
+    os.removedirs(TEMP)
+
 FNULL.close()
