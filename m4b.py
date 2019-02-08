@@ -186,9 +186,9 @@ else:
 # convert chapters to quicktime format
 debug ("converting to the Quicktime Format")
 if DEBUG:
-    subprocess.call(["MP4chaps", "--convert", "--chapter-qt", TEMP+"/output.mp4"])
+    subprocess.call(["mp4chaps", "--convert", "--chapter-qt", TEMP+"/output.mp4"])
 else:
-    subprocess.call(["MP4chaps", "--convert", "--chapter-qt", TEMP+"/output.mp4"], stdout=FNULL)
+    subprocess.call(["mp4chaps", "--convert", "--chapter-qt", TEMP+"/output.mp4"], stdout=FNULL)
 
 # create tags, rename file
 debug("Adding tags")
@@ -225,7 +225,7 @@ if COVER:
 
 if TITLE == ALBUM:
     debug("Rename "+TEMP+"/output.mp4 " +AUTHOR+" - "+TITLE+".m4b" )
-    shutil.copy(TEMP+"/output.mp4", "%s - %s.m4b" % (AUTHOR, TITLE))
+    shutil.move(TEMP+"/output.mp4", "%s - %s.m4b" % (AUTHOR, TITLE))
     print "Please check result: %s - %s.m4b" % (AUTHOR, TITLE)
 else:
     debug("Rename "+TEMP+"/output.mp4 " +AUTHOR+" - "+ALBUM+" - "+TITLE+".m4b" )
