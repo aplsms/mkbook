@@ -1,0 +1,293 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+
+import sys
+import argparse
+import re
+import os
+import shutil
+import logging
+import unicodedata
+from mutagen.mp4 import MP4
+
+AUTHOR   = ''
+ALBUM    = ''
+TITLE    = ""
+FILENAME = ''
+SPEAKER  = ''
+SERIES   = ''
+COMMENT  = ''
+MOVE     = False
+RENAME   = False
+DRYRUN   = False
+DIR      = ''
+
+LOGLEVEL = logging.WARNING
+
+parser = argparse.ArgumentParser(
+        prog='m4bt',
+        description='Progtam to add tags to audiobooks and move and/or rename them',
+        epilog='-=*=-')
+
+parser.add_argument('-a', '--author',  dest="author",  help='Audiobook Author' )
+parser.add_argument('-A', '--album',   dest="album",   help="Audiobook album name")
+parser.add_argument('-t', '--title',   dest="title",   help="Audiobook Title")
+parser.add_argument('-S', '--series',  dest="series",  help="Audiobook Series")
+parser.add_argument('-s', '--speaker', dest="speaker", help="Audiobook Speaker/Narrover")
+parser.add_argument('-C', '--comment', dest="comment", help="Audiobook Comment")
+parser.add_argument('-v', '--verbose', dest="verbose", action='store_true', help="verbose output")
+parser.add_argument('-m',              dest='move',    action='store_true', help="Move Audiobook to specific directory structure")
+parser.add_argument('-r',              dest='rename',  action='store_true', help='Rename Audiobook file by tags')
+parser.add_argument('-d',              dest='dryrun',  action='store_true', help='DryRun action. Do not change anythiing')
+parser.add_argument(      '--debug',   dest='debug' ,  action='store_true', help='Debug output')
+parser.add_argument('filenames', type=str, nargs='+', help='Audiobook filenames',)
+
+args = parser.parse_args()
+
+
+MOVE     = args.move
+RENAME   = args.rename
+DRYRUN   = args.dryrun
+
+VERBOSE  = logging.INFO  if args.verbose else LOGLEVEL
+LOGLEVEL = logging.DEBUG if args.debug   else LOGLEVEL
+
+logging.basicConfig(format='%(asctime)s %(message)s', datefmt='%m/%d/%Y %H:%M:%S', level=LOGLEVEL)
+
+
+logging.debug("File Names: "+str(args.filenames) )
+
+
+
+for book in args.filenames:
+
+    AUTHOR   = unicodedata.normalize('NFC', args.author )  if args.author  else ''
+    ALBUM    = unicodedata.normalize('NFC', args.album  )  if args.album   else ''
+    TITLE    = unicodedata.normalize('NFC', args.title  )  if args.title   else ''
+    SPEAKER  = unicodedata.normalize('NFC', args.speaker)  if args.speaker else ''
+    SERIES   = unicodedata.normalize('NFC', args.series )  if args.series  else ''
+    COMMENT  = unicodedata.normalize('NFC', args.comment)  if args.comment else ''
+
+
+    logging.debug("AUTHOR  : -=["+ str(AUTHOR)+"]=-")
+    logging.debug("ALBUM   : -=["+ str(ALBUM)+"]=-")
+    logging.debug("TITLE   : -=["+ str(TITLE)+"]=-")
+    logging.debug("SPEAKER : -=["+ str(SPEAKER)+"]=-")
+    logging.debug("SERIES  : -=["+ str(SERIES)+"]=-")
+    logging.debug("COMMENT : -=["+ str(COMMENT)+"]=-")
+    logging.debug("MOVE    : -=["+ str(MOVE)+"]=-")
+    logging.debug("RENAME  : -=["+ str(RENAME)+"]=-")
+    logging.debug("DRYRUN  : -=["+ str(DRYRUN)+"]=-")
+    logging.debug("VERBOSE : -=["+ str(args.verbose)+"]=-")
+    logging.debug("DEBUG   : -=["+ str(args.debug)+"]=-")
+
+    audio = MP4(book)
+    logging.warning( f"Processing {book}" )
+
+
+    if AUTHOR:
+        logging.warning("Set Author to: %s" % AUTHOR)
+        audio["\xa9ART"]    = [AUTHOR]
+
+    if TITLE:
+        logging.warning("Set Title to: %s" % TITLE)
+        audio["\xa9nam"]  =  [TITLE]
+        audio["\xa9alb"]   = [TITLE]
+
+    if ALBUM:
+        if ALBUM == "-":
+            ALBUM = ""
+            logging.warning("ReSet Album")
+            audio["\xa9alb"]    = ""
+        else:
+            logging.warning("Set Album to: %s" % ALBUM)
+            audio["\xa9alb"]    = [ALBUM]
+
+    if SERIES:
+        if SERIES == "-":
+            SERIES = ""
+            logging.warning("ReSet Series")
+            audio["tvsh"]    = ""
+        else:
+            logging.warning("Set Series name to: %s" % SERIES)
+            audio["tvsh"]    = [SERIES]
+
+    if SPEAKER:
+        if SPEAKER == "-":
+            SPEAKER = ''
+            logging.warning("ReSet Speaker")
+            audio["aART"]    = ''
+            audio['\xa9wrt'] = ''
+        else:
+            logging.warning("Set Speaker name to: %s" % SPEAKER)
+            audio["aART"]    = [SPEAKER]
+            audio['\xa9wrt'] = [SPEAKER]
+    else:
+        #try to get speaker from file name
+        r=re.compile('\\[(.*)\\]')
+        p = r.search( book )
+
+        if p:
+            S=p.groups(1)
+            logging.warning("Set Speaker name to: %s" % str(S[0]))
+            audio["aART"]    = [str(S[0])]
+            audio['\xa9wrt'] = [str(S[0])]
+
+    if COMMENT:
+        if COMMENT == "-":
+            COMMENT = ''
+            logging.warning("ReSet Comment")
+            audio["\xa9cmt"]    = ''
+        else:
+            logging.warning("Set Comment to: %s" % COMMENT)
+            audio["\xa9cmt"]    = [COMMENT]
+    else:
+        #try to get speaker from file name
+        r=re.compile('\\((.*)\\)')
+        p = r.search( book )
+        logging.debug(f"geting comment from file name" )
+
+        if p:
+            S=p.groups(1)
+            logging.warning("Set Comment to: %s" % str(S[0]))
+            audio["\xa9cmt"]    = [str(S[0])]
+
+    if not DRYRUN:
+        logging.debug("Saving data to AudioBook")
+        audio.save()
+    else:
+        logging.warning("DryRun option Set. do not storing data to audioBook")
+
+    tags=audio.tags
+
+    if '\xa9ART' not in tags:
+        print("Please set Author")
+        os.exit(99)
+
+    author = tags['\xa9ART'][0]
+
+    if '\xa9nam' not in tags:
+        print("Please set Name")
+        os.exit(99)
+    name = tags['\xa9nam'][0]
+
+    series = ''
+    if "tvsh" in tags and tags['tvsh']:
+        series = tags['tvsh'][0]
+
+    album = ''
+    if "\xa9alb" in tags and tags['\xa9alb']:
+        album = tags['\xa9alb'][0]
+    else:
+        album = name
+
+    speaker = ''
+    if '\xa9wrt' in tags and tags['\xa9wrt']:
+        speaker=tags['\xa9wrt'][0]
+
+    filename=book
+
+    logging.debug(f"Title:   {name}")
+    logging.debug(f"album:   {album}")
+    logging.debug(f"Series:  {series}")
+    logging.debug(f"Speaker: {speaker}")
+    logging.debug(f"Comment: {COMMENT}")
+
+
+    if RENAME:
+        if name != album:
+            k = re.compile( "%s. (.+)" % (album) )
+            pname=name
+            if k.match(name):
+                pname = k.search( str(name) ).group(1)
+            name = "%s - %s" % (album, pname)
+        if series:
+            k = re.compile( "%s.? (.+)" % (series) )
+            pname=name
+            if k.match(name):
+                pname = k.search( str(name) ).group(1)
+            filename =  "%s - %s. %s" % (author, series, pname)
+        else:
+            filename =  "%s - %s" % (author, name)
+        if speaker:
+            filename = filename + " [%s]" % (speaker)
+        if COMMENT:
+            filename = filename + " (%s)" % (COMMENT)
+        filename=filename+".m4b"
+        if not DRYRUN:
+            logging.info(f"Rename {book} to {filename}")
+            if (unicodedata.normalize('NFC', book) == unicodedata.normalize('NFC', filename)):
+                logging.error(f"No rename required for {filename}")
+            elif not os.path.isfile(filename):
+                shutil.move(book, filename)
+            else:
+                logging.error(f"Audiobook already exist:{ filename}")
+                sys.exit(98)
+        else:
+            logging.warning(f"DryRun option Set. Do not renaming {book} to {filename}")
+
+    logging.debug(f"Title:   {name}")
+    logging.debug(f"album:   {album}")
+    logging.debug(f"Series:  {series}")
+    logging.debug(f"Speaker: {speaker}")
+    logging.debug(f"Comment: {COMMENT}")
+
+    if MOVE:
+        path = ''
+
+        if album and series and album == name:
+            #cut series from name
+            k = re.compile( "%s.? (.+)" % (series) )
+            pname=name
+            if k.match(name):
+                pname = k.search( str(name) ).group(1)
+            logging.debug("Dir [album and series, album == title]: %s/%s/%s" % (author, series, pname ))
+            DIR= "%s/%s/%s" % (author, series, pname )
+
+        elif album and series and album != name:
+            #cut series from name
+            # k = re.compile( "%s.? (.+)" % (series) )
+            # pname=name
+            # if k.match(name):
+            #     pname = k.search( str(name) ).group(1)
+            logging.debug("Dir [album and series, album != title]: %s/%s/%s" % (author, series, album ))
+            DIR= "%s/%s/%s" % (author, series, album )
+
+        elif album and not series:
+            logging.debug("Dir [album and not series]: %s/%s" % (author, album ))
+            DIR= "%s/%s" % (author, album )
+
+        elif series and not ALBUM:
+            # Cut series name from File name
+            k = re.compile( "%s.? (.+)" % (series) )
+            pname=name
+            if k.match(name):
+                pname = k.search( str(name) ).group(1)
+            DIR= "%s/%s/%s" % (author, series, pname )
+        else:
+            DIR= "%s/%s" % (author, pname )
+
+        if not os.path.isdir(DIR):
+            try:
+                if not DRYRUN:
+                    logging.info(f"Create directory {DIR}")
+                    os.makedirs(DIR)
+                else:
+                    logging.warning(f"DryRun option Set. Do not create directory {DIR}")
+            except OSError as error:
+                logging.error(error)
+                sys.exit(99)
+
+        if not DRYRUN:
+            logging.info(f"Move {filename} to {DIR}/{filename}")
+            if not os.path.isfile(DIR +"/"+ filename):
+                shutil.move(filename, DIR +"/"+ filename)
+            else:
+                logging.error(f"Audiobook already exist: {DIR}/{filename}")
+                sys.exit(98)
+        else:
+            logging.warning(f"DryRun option Set. Do not move {filename} to {DIR}/{filename}")
+
+    logging.warning("Done")
+    print("")
+
