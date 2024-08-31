@@ -52,10 +52,147 @@ DRYRUN   = args.dryrun
 VERBOSE  = logging.INFO  if args.verbose else LOGLEVEL
 LOGLEVEL = logging.DEBUG if args.debug   else LOGLEVEL
 
+
+
 logging.basicConfig(format='%(asctime)s %(message)s', datefmt='%m/%d/%Y %H:%M:%S', level=LOGLEVEL)
 
 
 logging.debug("File Names: "+str(args.filenames) )
+
+def mkpath(tags):
+    logging.debug(f"Creating directory name by tags")
+
+    if '\xa9ART' not in tags:
+        print("Please set Author")
+        os.exit(99)
+
+    author = tags['\xa9ART'][0]
+
+    if '\xa9nam' not in tags:
+        print("Please set Name")
+        os.exit(99)
+    name = tags['\xa9nam'][0]
+
+    series = ''
+    if "tvsh" in tags and tags['tvsh']:
+        series = tags['tvsh'][0]
+
+    album = ''
+    if "\xa9alb" in tags and tags['\xa9alb']:
+        album = tags['\xa9alb'][0]
+    else:
+        album = name
+
+    speaker = ''
+    if '\xa9wrt' in tags and tags['\xa9wrt']:
+        speaker=tags['\xa9wrt'][0]
+
+    comment = ''
+    if '\xa9cmt' in tags and tags['\xa9cmt']:
+        comment=tags['\xa9cmt'][0]
+
+    logging.debug(f"Title:   {name}")
+    logging.debug(f"album:   {album}")
+    logging.debug(f"Series:  {series}")
+    logging.debug(f"Speaker: {speaker}")
+    logging.debug(f"Comment: {comment}")
+
+    if album and series and album == name:
+        #cut series from name
+        k = re.compile( "%s.? (.+)" % (series) )
+        pname=name
+        if k.match(name):
+            pname = k.search( str(name) ).group(1)
+        logging.debug("Dir [album and series, album == title]: %s/%s/%s" % (author, series, pname ))
+        DIR= "%s/%s/%s" % (author, series, pname )
+
+    elif album and series and album != name:
+        #cut series from name
+        # k = re.compile( "%s.? (.+)" % (series) )
+        # pname=name
+        # if k.match(name):
+        #     pname = k.search( str(name) ).group(1)
+        logging.debug("Dir [album and series, album != title]: %s/%s/%s" % (author, series, album ))
+        DIR= "%s/%s/%s" % (author, series, album )
+
+    elif album and not series:
+        logging.debug("Dir [album and not series]: %s/%s" % (author, album ))
+        DIR= "%s/%s" % (author, album )
+
+    elif series and not ALBUM:
+        # Cut series name from File name
+        k = re.compile( "%s.? (.+)" % (series) )
+        pname=name
+        if k.match(name):
+            pname = k.search( str(name) ).group(1)
+        DIR= "%s/%s/%s" % (author, series, pname )
+    else:
+        DIR= "%s/%s" % (author, pname )
+    logging.debug(f"Path   : {DIR}")
+    return DIR
+
+def mkfilename(tags):
+    logging.debug(f"Creating file name by tags")
+
+    if '\xa9ART' not in tags:
+        print("Please set Author")
+        os.exit(99)
+
+    author = tags['\xa9ART'][0]
+
+    if '\xa9nam' not in tags:
+        print("Please set Name")
+        os.exit(99)
+    name = tags['\xa9nam'][0]
+
+    series = ''
+    if "tvsh" in tags and tags['tvsh']:
+        series = tags['tvsh'][0]
+
+    album = ''
+    if "\xa9alb" in tags and tags['\xa9alb']:
+        album = tags['\xa9alb'][0]
+    else:
+        album = name
+
+    speaker = ''
+    if '\xa9wrt' in tags and tags['\xa9wrt']:
+        speaker=tags['\xa9wrt'][0]
+
+    comment = ''
+    if '\xa9cmt' in tags and tags['\xa9cmt']:
+        comment=tags['\xa9cmt'][0]
+
+    logging.debug(f"Title:   {name}")
+    logging.debug(f"album:   {album}")
+    logging.debug(f"Series:  {series}")
+    logging.debug(f"Speaker: {speaker}")
+    logging.debug(f"Comment: {comment}")
+
+    # Making new file name
+
+    if name != album:
+        k = re.compile( "%s. (.+)" % (album) )
+        pname=name
+        if k.match(name):
+            pname = k.search( str(name) ).group(1)
+        name = "%s - %s" % (album, pname)
+    if series:
+        k = re.compile( "%s.? (.+)" % (series) )
+        pname=name
+        if k.match(name):
+            pname = k.search( str(name) ).group(1)
+        filename =  "%s - %s. %s" % (author, series, pname)
+    else:
+        filename =  "%s - %s" % (author, name)
+    if speaker:
+        filename = filename + " [%s]" % (speaker)
+    if comment:
+        filename = filename + " (%s)" % (comment)
+    filename=filename+".m4b"
+    logging.debug(f"Filename: {filename}")
+
+    return filename
 
 
 
@@ -142,7 +279,7 @@ for book in args.filenames:
             logging.warning("Set Comment to: %s" % COMMENT)
             audio["\xa9cmt"]    = [COMMENT]
     else:
-        #try to get speaker from file name
+        #try to get comment from file name
         r=re.compile('\\((.*)\\)')
         p = r.search( book )
         logging.debug(f"geting comment from file name" )
@@ -158,135 +295,49 @@ for book in args.filenames:
     else:
         logging.warning("DryRun option Set. do not storing data to audioBook")
 
-    tags=audio.tags
+    if RENAME or MOVE:
 
-    if '\xa9ART' not in tags:
-        print("Please set Author")
-        os.exit(99)
+        tags=audio.tags
 
-    author = tags['\xa9ART'][0]
-
-    if '\xa9nam' not in tags:
-        print("Please set Name")
-        os.exit(99)
-    name = tags['\xa9nam'][0]
-
-    series = ''
-    if "tvsh" in tags and tags['tvsh']:
-        series = tags['tvsh'][0]
-
-    album = ''
-    if "\xa9alb" in tags and tags['\xa9alb']:
-        album = tags['\xa9alb'][0]
-    else:
-        album = name
-
-    speaker = ''
-    if '\xa9wrt' in tags and tags['\xa9wrt']:
-        speaker=tags['\xa9wrt'][0]
-
-    filename=book
-
-    logging.debug(f"Title:   {name}")
-    logging.debug(f"album:   {album}")
-    logging.debug(f"Series:  {series}")
-    logging.debug(f"Speaker: {speaker}")
-    logging.debug(f"Comment: {COMMENT}")
+        filename=mkfilename(tags)
 
 
-    if RENAME:
-        if name != album:
-            k = re.compile( "%s. (.+)" % (album) )
-            pname=name
-            if k.match(name):
-                pname = k.search( str(name) ).group(1)
-            name = "%s - %s" % (album, pname)
-        if series:
-            k = re.compile( "%s.? (.+)" % (series) )
-            pname=name
-            if k.match(name):
-                pname = k.search( str(name) ).group(1)
-            filename =  "%s - %s. %s" % (author, series, pname)
-        else:
-            filename =  "%s - %s" % (author, name)
-        if speaker:
-            filename = filename + " [%s]" % (speaker)
-        if COMMENT:
-            filename = filename + " (%s)" % (COMMENT)
-        filename=filename+".m4b"
-        if not DRYRUN:
-            logging.info(f"Rename {book} to {filename}")
-            if (unicodedata.normalize('NFC', book) == unicodedata.normalize('NFC', filename)):
-                logging.error(f"No rename required for {filename}")
-            elif not os.path.isfile(filename):
-                shutil.move(book, filename)
-            else:
-                logging.error(f"Audiobook already exist:{ filename}")
-                sys.exit(98)
-        else:
-            logging.warning(f"DryRun option Set. Do not renaming {book} to {filename}")
-
-    logging.debug(f"Title:   {name}")
-    logging.debug(f"album:   {album}")
-    logging.debug(f"Series:  {series}")
-    logging.debug(f"Speaker: {speaker}")
-    logging.debug(f"Comment: {COMMENT}")
-
-    if MOVE:
-        path = ''
-
-        if album and series and album == name:
-            #cut series from name
-            k = re.compile( "%s.? (.+)" % (series) )
-            pname=name
-            if k.match(name):
-                pname = k.search( str(name) ).group(1)
-            logging.debug("Dir [album and series, album == title]: %s/%s/%s" % (author, series, pname ))
-            DIR= "%s/%s/%s" % (author, series, pname )
-
-        elif album and series and album != name:
-            #cut series from name
-            # k = re.compile( "%s.? (.+)" % (series) )
-            # pname=name
-            # if k.match(name):
-            #     pname = k.search( str(name) ).group(1)
-            logging.debug("Dir [album and series, album != title]: %s/%s/%s" % (author, series, album ))
-            DIR= "%s/%s/%s" % (author, series, album )
-
-        elif album and not series:
-            logging.debug("Dir [album and not series]: %s/%s" % (author, album ))
-            DIR= "%s/%s" % (author, album )
-
-        elif series and not ALBUM:
-            # Cut series name from File name
-            k = re.compile( "%s.? (.+)" % (series) )
-            pname=name
-            if k.match(name):
-                pname = k.search( str(name) ).group(1)
-            DIR= "%s/%s/%s" % (author, series, pname )
-        else:
-            DIR= "%s/%s" % (author, pname )
-
-        if not os.path.isdir(DIR):
-            try:
-                if not DRYRUN:
-                    logging.info(f"Create directory {DIR}")
-                    os.makedirs(DIR)
+        if RENAME and not MOVE:
+            if not DRYRUN:
+                logging.info(f"Rename {book} to {filename}")
+                if (unicodedata.normalize('NFC', book) == unicodedata.normalize('NFC', filename)):
+                    logging.error(f"No rename required for {filename}")
+                elif not os.path.isfile(filename):
+                    shutil.move(book, filename)
                 else:
-                    logging.warning(f"DryRun option Set. Do not create directory {DIR}")
-            except OSError as error:
-                logging.error(error)
-                sys.exit(99)
-
-        if not DRYRUN:
-            logging.info(f"Move {filename} to {DIR}/{filename}")
-            if not os.path.isfile(DIR +"/"+ filename):
-                shutil.move(filename, DIR +"/"+ filename)
+                    logging.error(f"Audiobook already exist:{ filename}")
+                    sys.exit(98)
+                    # todo add change comment "+1" and try again. no mere than 10 iteraction
             else:
-                logging.error(f"Audiobook already exist: {DIR}/{filename}")
-                sys.exit(98)
-        else:
-            logging.warning(f"DryRun option Set. Do not move {filename} to {DIR}/{filename}")
+                logging.warning(f"DryRun option Set. Do not renaming {book} to {filename}")
+
+        elif MOVE:
+            DIR=mkpath(tags)
+            if not os.path.isdir(DIR):
+                try:
+                    if not DRYRUN:
+                        logging.info(f"Create directory {DIR}")
+                        os.makedirs(DIR)
+                    else:
+                        logging.warning(f"DryRun option Set. Do not create directory {DIR}")
+                except OSError as error:
+                    logging.error(error)
+                    sys.exit(99)
+
+            if not DRYRUN:
+                logging.info(f"Move {filename} to {DIR}/{filename}")
+                if not os.path.isfile(DIR +"/"+ filename):
+                    shutil.move(book, DIR +"/"+ filename)
+                else:
+                    logging.error(f"Audiobook already exist: {DIR}/{filename}")
+                    sys.exit(98)
+            else:
+                logging.warning(f"DryRun option Set. Do not move {filename} to {DIR}/{filename}")
 
     logging.warning("Done")
     print("")
